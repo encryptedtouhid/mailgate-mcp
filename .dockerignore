@@ -1,0 +1,25 @@
+# Only package files, tsconfig.json and src/ are needed to build the image.
+node_modules/
+dist/
+coverage/
+test/
+*.log
+.git/
+.github/
+.claude/
+.vscode/
+.idea/
+.DS_Store
+
+# Never send credentials to the build context; pass them at runtime instead.
+.env
+.env.*
+accounts.json
+accounts.*.json
+
+CLAUDE.md
+CLAUDE.local.md
+README.md
+Dockerfile
+docker-compose.yml
+run.sh

@@ -73,7 +73,14 @@ async function withImap<T>(
   fn: (client: ImapFlow) => Promise<T>
 ): Promise<T> {
   const client = createClient(account);
-  await client.connect();
+  try {
+    await client.connect();
+  } catch (err) {
+    // A failed login leaves the socket open, which would keep the process
+    // (and its Docker container) alive after the client goes away.
+    client.close();
+    throw err;
+  }
   try {
     return await fn(client);
   } finally {
