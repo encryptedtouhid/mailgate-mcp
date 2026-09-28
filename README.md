@@ -41,10 +41,10 @@ The flags in `.env` decide what the AI may do. The server enforces them, not the
 | `EMAIL_ALLOW_MOVE` | `true` | `move_emails` (moving to Trash also needs delete) |
 | `EMAIL_ALLOW_DELETE` | `true` | `delete_emails` (moves mail to Trash) |
 | `EMAIL_ALLOW_PERMANENT_DELETE` | `false` | Erasing mail permanently (also needs delete) |
-| `EMAIL_ALLOWED_RECIPIENTS` | anyone | Comma-separated domains or addresses the AI may send to, e.g. `navo.health,partner@x.com` |
+| `EMAIL_ALLOWED_RECIPIENTS` | anyone | Comma-separated domains or addresses the AI may send to, e.g. `navo.health,partner@x.com`. Each recipient the AI passes must be a single address |
 | `EMAIL_MAX_RECIPIENTS` | `20` | Largest number of to + cc + bcc recipients in one email |
 
-`list_accounts` reports the current guardrails, so the AI knows its limits before it tries anything. A blocked action returns an error that names the flag. The server logs its guardrails at startup, and it refuses to start if a flag has a value it doesn't recognize. Restart the server after changing a flag.
+`list_accounts` reports the current guardrails, so the AI knows its limits before it tries anything. A blocked action returns an error that names the flag. The server logs its guardrails at startup, and it refuses to start if a flag has a value it doesn't recognize. Restart the server after changing a flag; for Claude Desktop, quit it (Cmd+Q) and reopen it.
 
 ## Quick start
 
@@ -107,13 +107,33 @@ The server reads `.env` from the project folder. You can also put the variables 
 
 If Claude Desktop can't find `node` (common with nvm or Homebrew), set `"command"` to the full path that `which node` prints.
 
-To run it in Docker instead, build the image once (`docker build -t mailgate-mcp .`) and use:
+#### Claude Desktop with Docker
+
+If the compose container is running (see [Docker](#docker)), run mailgate inside it. Claude Desktop can start an MCP server more than once, so this avoids a new container for each launch, and it uses the container's guardrail settings:
 
 ```json
 {
   "mcpServers": {
     "mailgate": {
-      "command": "docker",
+      "command": "/usr/local/bin/docker",
+      "args": [
+        "exec", "-i", "-e", "MCP_TRANSPORT=stdio",
+        "mailgate-mcp-mailgate-1", "node", "dist/index.js"
+      ]
+    }
+  }
+}
+```
+
+The container must be running whenever you use Claude Desktop. After recreating it (`docker compose up -d`), restart Claude Desktop so it reconnects.
+
+Without compose, Claude Desktop can start its own container each time instead. Build the image once (`docker build -t mailgate-mcp .`) and use:
+
+```json
+{
+  "mcpServers": {
+    "mailgate": {
+      "command": "/usr/local/bin/docker",
       "args": [
         "run", "-i", "--rm", "--init",
         "--env-file", "/absolute/path/to/mailgate-mcp/.env",
@@ -124,6 +144,17 @@ To run it in Docker instead, build the image once (`docker build -t mailgate-mcp
   }
 }
 ```
+
+Add `"-e", "EMAIL_ALLOW_DELETE=false"` (or any other flag) before `"mailgate-mcp"` to override `.env` for Claude Desktop only.
+
+#### Using it in a chat
+
+1. Use the **Chat** tab of the Claude Desktop app. Local servers aren't available in claude.ai on the web or on your phone; those need the HTTP connector below.
+2. Start a new chat and open the **+ / tools** menu in the message box. Check that **mailgate** is listed and switched on.
+3. If another email connector such as Gmail is also on, name the tool so Claude picks the right one: *"Use mailgate to show my unread emails from today."* Turning the other connector off for that chat also works.
+4. Approve the permission prompt the first time a tool runs. Keeping send, forward and delete on "Allow once" gives you a final check before anything leaves your mailbox.
+
+Each step Claude takes shows which tool it used (`search_emails`, `read_email` and so on, from mailgate).
 
 ### Claude Code
 
@@ -154,7 +185,7 @@ Clients that can send headers can use `https://host/mcp` with `Authorization: Be
 
 For an always-on setup, run it in Docker (see below).
 
-> **Security:** anyone who has the URL and token can read and send your email. Keep the token secret, always use HTTPS, and consider `EMAIL_READ_ONLY=true` for remote use. The server refuses to listen on a public interface when no token is set.
+> **Security:** anyone who has the URL and token can read and send your email. Keep the token secret, always use HTTPS, and consider `EMAIL_READ_ONLY=true` for remote use. The server refuses to listen on a public interface when no token is set, and without a token it only accepts requests addressed to `localhost`/`127.0.0.1`, so websites can't reach it through DNS rebinding.
 
 ## Docker
 
@@ -171,6 +202,17 @@ docker compose down
 
 For multiple accounts, set `EMAIL_ACCOUNTS_FILE=/app/accounts.json` in `.env` and uncomment the `volumes` block to mount `accounts.json`.
 
+To change guardrails for the container without touching `.env`, create `docker-compose.override.yml` (compose loads it automatically, and it is git-ignored):
+
+```yaml
+services:
+  mailgate:
+    environment:
+      EMAIL_ALLOW_DELETE: 'false'
+```
+
+Then run `docker compose up -d` to recreate the container.
+
 Without compose:
 
 ```bash
@@ -183,6 +225,14 @@ The same image runs on a VPS, Fly.io, Railway, or Render: set the environment va
 
 > `docker run --env-file` does not strip comments at the end of a line, so keep `.env` values free of trailing `# ...` comments.
 
+## Troubleshooting
+
+- **"The mail server is temporarily refusing logins"** (the server says *Temporary authentication failure*): your provider is throttling logins after too many in a short time. Your password is fine. Wait a few minutes and try again. Running fewer copies of the server (for example one Docker container instead of several) keeps logins down.
+- **"Authentication failed … check the username/password"**: the login was rejected. Gmail, iCloud, Yahoo and Fastmail need an app password, and Zoho needs IMAP turned on.
+- **mailgate is missing in Claude Desktop**: look under Settings → Developer, and read `~/Library/Logs/Claude/mcp-server-mailgate.log`. `spawn node ENOENT` means Claude Desktop can't find `node`; use its full path (`which node`).
+- **Claude answers from Gmail or says mailgate isn't connected**: see [Using it in a chat](#using-it-in-a-chat).
+- **Changes don't take effect**: rebuild (`npm run build`, or `docker compose up -d --build`), then restart Claude Desktop.
+
 ## Development
 
 ```bash
@@ -192,4 +242,4 @@ npm run dev       # stdio via tsx
 npm run dev:http  # HTTP via tsx
 ```
 
-Each tool call opens its own short-lived IMAP connection, so nothing breaks when a connection sits idle between chat turns.
+Each account has one IMAP connection that is reused across tool calls and closed after 60 seconds idle, so a busy chat costs one login instead of one per call. Calls for the same account run one at a time, and a dropped connection is reopened on the next call.
