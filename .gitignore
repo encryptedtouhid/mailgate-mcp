@@ -33,3 +33,6 @@ CLAUDE.md
 CLAUDE.local.md
 **/CLAUDE.md
 .claude/settings.local.json
+
+# Local Docker Compose overrides
+docker-compose.override.yml
