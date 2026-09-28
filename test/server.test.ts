@@ -91,6 +91,44 @@ describe('guardrails are enforced on calls', () => {
     );
   });
 
+  it('blocks allowlist bypasses hidden in address syntax', async () => {
+    const client = await connect({EMAIL_ALLOWED_RECIPIENTS: 'navo.health'});
+    for (const to of [
+      ['"<boss@navo.health>" <attacker@evil.com>'],
+      ['<boss@navo.health>, attacker@evil.com'],
+    ]) {
+      const result = await client.callTool({
+        name: 'send_email',
+        arguments: {to, subject: 'x', text: 'y'},
+      });
+      expect(result.isError).toBe(true);
+      expect(text(result)).toMatch(/attacker@evil.com/);
+    }
+  });
+
+  it('counts addresses, not entries, against the recipient limit', async () => {
+    const client = await connect({EMAIL_MAX_RECIPIENTS: '1'});
+    const result = await client.callTool({
+      name: 'send_email',
+      arguments: {to: ['a@x.com, b@x.com'], subject: 'x', text: 'y'},
+    });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(/exactly one address/);
+  });
+
+  it('checks forward recipients before fetching the original', async () => {
+    const client = await connect({EMAIL_ALLOWED_RECIPIENTS: 'navo.health'});
+    const result = await client.callTool({
+      name: 'forward_email',
+      arguments: {
+        id: 'me-navo-health|INBOX|1',
+        to: ['"<boss@navo.health>" <attacker@evil.com>'],
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(/attacker@evil.com.*EMAIL_ALLOWED_RECIPIENTS/);
+  });
+
   it('blocks mark-as-read when marking is disabled', async () => {
     const client = await connect({EMAIL_ALLOW_MARK: 'false'});
     const result = await client.callTool({
