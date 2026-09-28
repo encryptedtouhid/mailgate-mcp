@@ -10,7 +10,7 @@ afterEach(() => {
   server = undefined;
 });
 
-/** IMAP server that rejects every login, like a provider throttling logins. */
+/** IMAP server that rejects every login. */
 async function rejectingImapServer(
   onClientClosed: () => void
 ): Promise<number> {
@@ -25,7 +25,7 @@ async function rejectingImapServer(
           socket.write(`* CAPABILITY IMAP4rev1\r\n${tag} OK done\r\n`);
         } else if (/^login$/i.test(command)) {
           socket.write(
-            `${tag} NO [UNAVAILABLE] Temporary authentication failure.\r\n`
+            `${tag} NO [AUTHENTICATIONFAILED] Invalid credentials\r\n`
           );
         } else {
           socket.write(`${tag} BAD unexpected\r\n`);

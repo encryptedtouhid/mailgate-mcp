@@ -6,6 +6,7 @@
 import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
 import type {Account, AccountRegistry} from '../config.js';
 import {decodeMessageId, type MessageRef} from '../ids.js';
+import {isTemporaryAuthFailure} from '../imap-pool.js';
 
 /** Extra fields imapflow and nodemailer attach to their errors. */
 interface MailError extends Error {
@@ -23,6 +24,9 @@ export function describeError(err: unknown): string {
   if (!(err instanceof Error)) return String(err);
   // Safe: every MailError field is optional, so any Error satisfies the shape.
   const e: MailError = err;
+  if (isTemporaryAuthFailure(err)) {
+    return `The mail server is temporarily refusing logins (${e.responseText ?? e.response ?? e.message}). This usually means too many logins in a short time; wait a minute and try again.`;
+  }
   if (e.authenticationFailed || e.code === 'EAUTH') {
     return `Authentication failed: ${e.responseText ?? e.response ?? e.message}. Check the username/password (many providers require an app password).`;
   }
