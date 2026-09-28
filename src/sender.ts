@@ -9,6 +9,7 @@ import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import type Mail from 'nodemailer/lib/mailer/index.js';
 import type {Account} from './config.js';
 import {appendToSpecial} from './mailbox.js';
+import type {Recipient} from './recipients.js';
 
 export interface OutgoingAttachment {
   filename: string;
@@ -30,13 +31,25 @@ export interface OutgoingMessage {
   rawAttachments?: Mail.Attachment[];
 }
 
+/** A message whose recipients were parsed and checked by the guardrails; only these are delivered to. */
+export interface SendableMessage extends Omit<
+  OutgoingMessage,
+  'to' | 'cc' | 'bcc'
+> {
+  to: Recipient[];
+  cc: Recipient[];
+  bcc: Recipient[];
+}
+
+type AnyMessage = OutgoingMessage | SendableMessage;
+
 function fromHeader(account: Account): Mail.Address | string {
   return account.displayName
     ? {name: account.displayName, address: account.email}
     : account.email;
 }
 
-function toMailOptions(account: Account, msg: OutgoingMessage): Mail.Options {
+function toMailOptions(account: Account, msg: AnyMessage): Mail.Options {
   return {
     from: fromHeader(account),
     to: msg.to,
@@ -61,7 +74,7 @@ function toMailOptions(account: Account, msg: OutgoingMessage): Mail.Options {
 /** Build the RFC 822 message once so the exact same bytes are sent and saved to Sent/Drafts. */
 export async function buildRawMessage(
   account: Account,
-  msg: OutgoingMessage
+  msg: AnyMessage
 ): Promise<Buffer> {
   const options = toMailOptions(account, msg);
   // Keep Bcc in the stored copy so the sender can see who was bcc'd; SMTP envelope controls delivery.
@@ -74,8 +87,9 @@ export async function buildRawMessage(
   return node.build();
 }
 
-export async function sendMessage(account: Account, msg: OutgoingMessage) {
-  if (msg.to.length === 0 && !msg.cc?.length && !msg.bcc?.length) {
+export async function sendMessage(account: Account, msg: SendableMessage) {
+  const recipients = [...msg.to, ...msg.cc, ...msg.bcc].map(r => r.address);
+  if (recipients.length === 0) {
     throw new Error('At least one recipient is required');
   }
   if (!msg.text && !msg.html) throw new Error('Provide a text or html body');
@@ -90,7 +104,6 @@ export async function sendMessage(account: Account, msg: OutgoingMessage) {
   });
 
   const raw = await buildRawMessage(account, msg);
-  const recipients = [...msg.to, ...(msg.cc ?? []), ...(msg.bcc ?? [])];
   let info;
   try {
     info = await transporter.sendMail({

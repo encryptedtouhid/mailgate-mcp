@@ -5,6 +5,7 @@ import {
   describeGuardrails,
   loadGuardrails,
 } from '../src/guardrails.js';
+import {parseRecipients} from '../src/recipients.js';
 
 describe('loadGuardrails', () => {
   it('allows everything except permanent delete by default', () => {
@@ -81,7 +82,9 @@ describe('assertAllowed', () => {
 describe('checkRecipients', () => {
   it('allows anyone when the allowlist is empty', () => {
     const g = loadGuardrails({});
-    expect(() => checkRecipients(g, ['a@anywhere.com'])).not.toThrow();
+    expect(() =>
+      checkRecipients(g, parseRecipients(['a@anywhere.com']))
+    ).not.toThrow();
   });
 
   it('matches domains and exact addresses, including display-name form', () => {
@@ -89,21 +92,30 @@ describe('checkRecipients', () => {
       EMAIL_ALLOWED_RECIPIENTS: '@navo.health,partner@x.com',
     });
     expect(() =>
-      checkRecipients(g, ['Momini <momini.vl@NAVO.health>', 'partner@x.com'])
+      checkRecipients(
+        g,
+        parseRecipients(['Momini <momini.vl@NAVO.health>', 'partner@x.com'])
+      )
     ).not.toThrow();
-    expect(() => checkRecipients(g, ['other@x.com'])).toThrow(/other@x.com/);
-    expect(() => checkRecipients(g, ['a@evilnavo.health'])).toThrow();
+    expect(() => checkRecipients(g, parseRecipients(['other@x.com']))).toThrow(
+      /other@x.com/
+    );
+    expect(() =>
+      checkRecipients(g, parseRecipients(['a@evilnavo.health']))
+    ).toThrow();
   });
 
   it('enforces the recipient limit', () => {
     const g = loadGuardrails({EMAIL_MAX_RECIPIENTS: '2'});
-    expect(() => checkRecipients(g, ['a@x.com', 'b@x.com', 'c@x.com'])).toThrow(
-      /3 recipients/
-    );
+    expect(() =>
+      checkRecipients(g, parseRecipients(['a@x.com', 'b@x.com', 'c@x.com']))
+    ).toThrow(/3 recipients/);
   });
 
-  it('rejects unparseable addresses when an allowlist is set', () => {
+  it('checks addresses case-insensitively', () => {
     const g = loadGuardrails({EMAIL_ALLOWED_RECIPIENTS: 'x.com'});
-    expect(() => checkRecipients(g, ['not an address'])).toThrow();
+    expect(() =>
+      checkRecipients(g, parseRecipients(['Bob <BOB@X.COM>']))
+    ).not.toThrow();
   });
 });

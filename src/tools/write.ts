@@ -23,6 +23,7 @@ import {
   moveMessages,
   updateFlags,
 } from '../mailbox.js';
+import {parseRecipients} from '../recipients.js';
 import {saveDraft, sendMessage, type OutgoingMessage} from '../sender.js';
 import {groupIds, json, resolveOne, safe} from './common.js';
 import {ACCOUNT_PARAM} from './read.js';
@@ -30,7 +31,7 @@ import {ACCOUNT_PARAM} from './read.js';
 const ADDRESS_LIST = z
   .array(z.string())
   .describe(
-    'Addresses, e.g. "jane@example.com" or "Jane Doe <jane@example.com>"'
+    'One address per entry, e.g. "jane@example.com" or "Jane Doe <jane@example.com>"'
   );
 const ATTACHMENTS = z
   .array(
@@ -83,14 +84,19 @@ export function registerWriteTools(
 ): void {
   // Tools for disabled actions are not registered at all, so the model never
   // sees them. Every handler still re-checks in case of a direct call.
+  // Recipients are parsed once and the parsed addresses are what gets sent,
+  // so the guardrails check exactly the addresses mail is delivered to.
+  function checkedRecipients(m: Pick<OutgoingMessage, 'to' | 'cc' | 'bcc'>) {
+    const to = parseRecipients(m.to);
+    const cc = parseRecipients(m.cc ?? []);
+    const bcc = parseRecipients(m.bcc ?? []);
+    checkRecipients(guardrails, [...to, ...cc, ...bcc]);
+    return {to, cc, bcc};
+  }
+
   function send(account: Account, message: OutgoingMessage) {
     assertAllowed(guardrails, 'send');
-    checkRecipients(guardrails, [
-      ...message.to,
-      ...(message.cc ?? []),
-      ...(message.bcc ?? []),
-    ]);
-    return sendMessage(account, message);
+    return sendMessage(account, {...message, ...checkedRecipients(message)});
   }
 
   function draft(account: Account, message: OutgoingMessage) {
@@ -174,6 +180,8 @@ export function registerWriteTools(
       },
       safe(async ({id, to, cc, text, includeAttachments}) => {
         assertAllowed(guardrails, 'forward');
+        // Fail fast before downloading the original and its attachments.
+        checkedRecipients({to, cc});
         const {account, ref} = resolveOne(registry, id);
         const o = await getOriginalForReply(account, ref.folder, ref.uid);
         const toText = o.to.map(a => a.address).join(', ');
