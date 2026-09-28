@@ -11,6 +11,7 @@ import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js';
 import {AccountRegistry, loadAccounts} from './config.js';
 import {describeGuardrails, loadGuardrails} from './guardrails.js';
 import {startHttpServer} from './http.js';
+import {closeImapConnections} from './mailbox.js';
 import {createServer} from './server.js';
 
 // Claude Desktop launches servers with cwd "/", so look for .env next to the project as well as in cwd.
@@ -67,6 +68,15 @@ async function main(): Promise<void> {
   // stdio: stdout carries the protocol, so all logging goes to stderr.
   const server = createServer(registry, {guardrails});
   await server.connect(new StdioServerTransport());
+  // The pooled IMAP connection would otherwise keep the process (and its
+  // Docker container) alive until it idles out after the client has gone.
+  // Give logouts a moment, but don't wait on a login the server is stalling.
+  process.stdin.on('end', () => {
+    const timeout = new Promise(resolve => setTimeout(resolve, 2_000));
+    void Promise.race([closeImapConnections(), timeout]).finally(() =>
+      process.exit(0)
+    );
+  });
   console.error(
     `mailgate-mcp ready (stdio) for ${registry
       .list()

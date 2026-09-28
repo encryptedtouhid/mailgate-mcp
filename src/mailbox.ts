@@ -1,6 +1,6 @@
 /**
  * @fileoverview IMAP operations: listing, searching, reading and organizing
- * messages. Each operation uses its own short-lived connection.
+ * messages over a pooled connection per account (see imap-pool.ts).
  */
 
 import {
@@ -12,6 +12,7 @@ import {simpleParser, type AddressObject, type ParsedMail} from 'mailparser';
 import {convert as htmlToText} from 'html-to-text';
 import type {Account} from './config.js';
 import {encodeMessageId} from './ids.js';
+import {ImapPool} from './imap-pool.js';
 import {buildSearchCriteria, pickNewest, type SearchParams} from './search.js';
 
 const SPECIAL_FOLDERS = [
@@ -67,25 +68,23 @@ function createClient(account: Account): ImapFlow {
   });
 }
 
-/** One short-lived connection per operation: simple, and immune to idle timeouts between tool calls. */
-async function withImap<T>(
+// One connection per account, reused across calls and closed when idle.
+const pool = new ImapPool(createClient, {
+  idleMs: 60_000,
+  retryDelaysMs: [2_000],
+  fastFailureMs: 5_000,
+});
+
+/** Logs out of every IMAP connection, e.g. before the process exits. */
+export function closeImapConnections(): Promise<void> {
+  return pool.closeAll();
+}
+
+function withImap<T>(
   account: Account,
   fn: (client: ImapFlow) => Promise<T>
 ): Promise<T> {
-  const client = createClient(account);
-  try {
-    await client.connect();
-  } catch (err) {
-    // A failed login leaves the socket open, which would keep the process
-    // (and its Docker container) alive after the client goes away.
-    client.close();
-    throw err;
-  }
-  try {
-    return await fn(client);
-  } finally {
-    await client.logout().catch(() => client.close());
-  }
+  return pool.run(account, fn);
 }
 
 async function withFolder<T>(
