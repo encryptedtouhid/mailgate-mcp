@@ -15,7 +15,7 @@ export function prefixSubject(subject: string, prefix: 'Re' | 'Fwd'): string {
 
 function format(a: Addr): string {
   return a.name
-    ? `"${a.name.replace(/"/g, "'")}" <${a.address}>`
+    ? `"${a.name.replace(/\\/g, '').replace(/"/g, "'")}" <${a.address}>`
     : (a.address ?? '');
 }
 

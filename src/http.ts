@@ -3,7 +3,13 @@
  */
 
 import {timingSafeEqual} from 'node:crypto';
-import express, {type NextFunction, type Request, type Response} from 'express';
+import express, {
+  type Express,
+  type NextFunction,
+  type Request,
+  type Response,
+} from 'express';
+import {localhostHostValidation} from '@modelcontextprotocol/sdk/server/middleware/hostHeaderValidation.js';
 import {StreamableHTTPServerTransport} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type {AccountRegistry} from './config.js';
 import {createServer, type ServerOptions} from './server.js';
@@ -41,11 +47,15 @@ function requireToken(token: string | undefined) {
   };
 }
 
-export function startHttpServer(
+export function createHttpApp(
   registry: AccountRegistry,
   options: HttpOptions
-) {
+): Express {
   const app = express();
+  // Without a token, only localhost Host headers are accepted, so a web page
+  // cannot reach this server through DNS rebinding. With a token the Host is
+  // left alone, so tunnels and reverse proxies keep working.
+  if (!options.authToken) app.use(localhostHostValidation());
   app.use(express.json({limit: '30mb'}));
 
   app.get('/health', (_req, res) => {
@@ -92,6 +102,14 @@ export function startHttpServer(
     app.delete(path, auth, notAllowed);
   }
 
+  return app;
+}
+
+export function startHttpServer(
+  registry: AccountRegistry,
+  options: HttpOptions
+) {
+  const app = createHttpApp(registry, options);
   return app.listen(options.port, options.host, () => {
     console.error(
       `mailgate-mcp listening on http://${options.host}:${options.port}/mcp`

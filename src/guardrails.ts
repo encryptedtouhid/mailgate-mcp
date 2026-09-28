@@ -3,6 +3,8 @@
  * MCP may perform, and who it may send mail to.
  */
 
+import type {Recipient} from './recipients.js';
+
 type Env = Record<string, string | undefined>;
 
 export interface Guardrails {
@@ -107,13 +109,6 @@ export function assertAllowed(g: Guardrails, action: GuardedAction): void {
   );
 }
 
-/** Pulls the bare address out of "Name <a@b.com>" or "a@b.com". */
-function bareAddress(recipient: string): string | undefined {
-  const match = recipient.match(/<([^>]+)>/);
-  const address = (match ? match[1] : recipient).trim().toLowerCase();
-  return /^[^\s@<>]+@[^\s@<>]+$/.test(address) ? address : undefined;
-}
-
 function recipientAllowed(address: string, allowlist: string[]): boolean {
   const domain = address.slice(address.lastIndexOf('@') + 1);
   return allowlist.some(entry => {
@@ -124,9 +119,10 @@ function recipientAllowed(address: string, allowlist: string[]): boolean {
   });
 }
 
+/** Checks parsed recipients (see parseRecipients), which are exactly what gets delivered. */
 export function checkRecipients(
   g: Guardrails,
-  recipients: readonly string[]
+  recipients: readonly Recipient[]
 ): void {
   if (recipients.length > g.maxRecipients) {
     throw new Error(
@@ -135,10 +131,9 @@ export function checkRecipients(
     );
   }
   if (g.allowedRecipients.length === 0) return;
-  const blocked = recipients.filter(r => {
-    const address = bareAddress(r);
-    return !address || !recipientAllowed(address, g.allowedRecipients);
-  });
+  const blocked = recipients
+    .map(r => r.address.toLowerCase())
+    .filter(address => !recipientAllowed(address, g.allowedRecipients));
   if (blocked.length > 0) {
     throw new Error(
       `Blocked by guardrail: ${blocked.join(', ')} not in ` +
