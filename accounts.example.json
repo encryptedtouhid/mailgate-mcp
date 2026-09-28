@@ -1,0 +1,23 @@
+[
+  {
+    "id": "work",
+    "provider": "privateemail",
+    "email": "me@mydomain.com",
+    "displayName": "My Name",
+    "password": "env:WORK_EMAIL_PASSWORD"
+  },
+  {
+    "id": "zoho",
+    "provider": "zoho-pro",
+    "email": "me@myotherdomain.com",
+    "password": "env:ZOHO_APP_PASSWORD"
+  },
+  {
+    "id": "custom",
+    "provider": "custom",
+    "email": "me@example.org",
+    "password": "env:CUSTOM_PASSWORD",
+    "imap": { "host": "mail.example.org", "port": 993, "secure": true },
+    "smtp": { "host": "mail.example.org", "port": 587, "secure": false }
+  }
+]

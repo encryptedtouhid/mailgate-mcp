@@ -1,0 +1,57 @@
+{
+  "name": "mailgate-mcp",
+  "version": "1.0.0",
+  "description": "Guarded MCP server that connects Claude and ChatGPT to any IMAP/SMTP mailbox (PrivateEmail, Zoho, Gmail, Fastmail, or your own domain), with per-action permissions for sending, deleting and more.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mailgate-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:http": "node dist/index.js --http",
+    "dev": "tsx src/index.ts",
+    "dev:http": "tsx src/index.ts --http",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write src test",
+    "format:check": "prettier --check src test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "html-to-text": "^9.0.5",
+    "imapflow": "^1.0.190",
+    "mailparser": "^3.7.2",
+    "nodemailer": "^6.10.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/html-to-text": "^9.0.4",
+    "@types/mailparser": "^3.4.5",
+    "@types/node": "^22.10.0",
+    "@types/nodemailer": "^6.4.17",
+    "prettier": "^3.9.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "email",
+    "imap",
+    "smtp",
+    "claude",
+    "chatgpt",
+    "privateemail",
+    "zoho",
+    "guardrails"
+  ]
+}

@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Secrets: mailbox credentials and the MCP auth token
+.env
+.env.*
+!.env.example
+accounts.json
+accounts.*.json
+!accounts.example.json
+
+# Logs
+*.log
+npm-debug.log*
+.tunnel.log
+
+# Test coverage
+coverage/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Claude Code files
+CLAUDE.md
+CLAUDE.local.md
+**/CLAUDE.md
+.claude/settings.local.json
