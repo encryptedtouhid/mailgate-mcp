@@ -105,6 +105,26 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 The server reads `.env` from the project folder. You can also put the variables in an `"env": { ... }` block here. Restart Claude Desktop afterwards.
 
+If Claude Desktop can't find `node` (common with nvm or Homebrew), set `"command"` to the full path that `which node` prints.
+
+To run it in Docker instead, build the image once (`docker build -t mailgate-mcp .`) and use:
+
+```json
+{
+  "mcpServers": {
+    "mailgate": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm", "--init",
+        "--env-file", "/absolute/path/to/mailgate-mcp/.env",
+        "-e", "MCP_TRANSPORT=stdio",
+        "mailgate-mcp"
+      ]
+    }
+  }
+}
+```
+
 ### Claude Code
 
 ```bash
@@ -132,9 +152,36 @@ https://<your-tunnel-or-domain>/mcp/<MCP_AUTH_TOKEN>
 
 Clients that can send headers can use `https://host/mcp` with `Authorization: Bearer <token>` instead.
 
-For an always-on setup, deploy the `Dockerfile` to a VPS, Fly.io, Railway, or Render. Set the same environment variables there. The container listens on `0.0.0.0:3000`.
+For an always-on setup, run it in Docker (see below).
 
 > **Security:** anyone who has the URL and token can read and send your email. Keep the token secret, always use HTTPS, and consider `EMAIL_READ_ONLY=true` for remote use. The server refuses to listen on a public interface when no token is set.
+
+## Docker
+
+The image runs the HTTP transport on port 3000 by default. It holds no credentials; `.env` and `accounts.json` are passed in at runtime.
+
+```bash
+# add MCP_AUTH_TOKEN to .env first: the server refuses to listen on 0.0.0.0 without it
+docker compose up -d --build     # http://127.0.0.1:3000/mcp/<MCP_AUTH_TOKEN>
+docker compose logs -f
+docker compose down
+```
+
+`docker-compose.yml` publishes the port on `127.0.0.1` only, so put a tunnel (`cloudflared tunnel --url http://localhost:3000`) or an HTTPS reverse proxy in front. Set `MAILGATE_PORT` to use another host port. The container runs as a non-root user on a read-only filesystem, with a healthcheck on `/health`.
+
+For multiple accounts, set `EMAIL_ACCOUNTS_FILE=/app/accounts.json` in `.env` and uncomment the `volumes` block to mount `accounts.json`.
+
+Without compose:
+
+```bash
+docker build -t mailgate-mcp .
+docker run -d --init --restart unless-stopped --env-file .env \
+  -e HOST=0.0.0.0 -p 127.0.0.1:3000:3000 mailgate-mcp
+```
+
+The same image runs on a VPS, Fly.io, Railway, or Render: set the environment variables there and expose port 3000.
+
+> `docker run --env-file` does not strip comments at the end of a line, so keep `.env` values free of trailing `# ...` comments.
 
 ## Development
 

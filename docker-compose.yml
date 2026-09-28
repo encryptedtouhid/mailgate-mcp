@@ -1,0 +1,27 @@
+# HTTP mode for ChatGPT and claude.ai connectors.
+#   docker compose up -d --build
+# Needs MCP_AUTH_TOKEN in .env: the server refuses to listen on 0.0.0.0 without it.
+services:
+  mailgate:
+    build: .
+    image: mailgate-mcp
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Pinned so a HOST/PORT meant for running outside Docker cannot make
+      # the container unreachable.
+      MCP_TRANSPORT: http
+      HOST: 0.0.0.0
+      PORT: 3000
+    ports:
+      # Published on the host's loopback only; put a tunnel or reverse proxy
+      # with HTTPS in front. Change to "3000:3000" to expose it directly.
+      - '127.0.0.1:${MAILGATE_PORT:-3000}:3000'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    # For multiple accounts: set EMAIL_ACCOUNTS_FILE=/app/accounts.json in .env
+    # and uncomment this.
+    # volumes:
+    #   - ./accounts.json:/app/accounts.json:ro
